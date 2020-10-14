@@ -1,4 +1,4 @@
-module github.com/tanaka-takurou/serverless-application-ephemerality-page-go/tree/scheduled
+module github.com/tanaka-takurou/serverless-application-cron-page-go
 
 go 1.15
 
