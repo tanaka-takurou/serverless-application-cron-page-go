@@ -1,0 +1,71 @@
+{{define "base"}}
+<!doctype html>
+<html>
+  <head>
+{{template "headtag" .}}
+  </head>
+  <body>
+    <h1 class="ui center aligned header">Cloud Watch Events</h1>
+    <div class="main ui container">
+      <div class="ui segment">
+        <div class="content">
+          <div class="ui form">
+            <div class="field">
+              <label>Last Event: <span id="last_event"></span></label>
+            </div>
+            <div class="field">
+              <label>Schedule: <span id="event_schedule"></span></label>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+    <h3 class="ui center aligned header">Event Schedule</h3>
+    <div class="main ui container">
+      <form class="ui segment" method="POST">
+        <div class="content">
+          <div class="ui form">
+            <div class="field">
+              <label>Year</label>
+              <div class="ui input">
+                <input id="year" name="year" type="number" min="0" max="2199">
+              </div>
+            </div>
+            <div class="field">
+              <label>Month</label>
+              <div class="ui input">
+                <input id="month" name="month" type="number" min="0" max="12">
+              </div>
+            </div>
+            <div class="field">
+              <label>Day</label>
+              <div class="ui input">
+                <input id="day" name="day" type="number" min="0" max="31">
+              </div>
+            </div>
+            <div class="field">
+              <label>Hour</label>
+              <div class="ui input">
+                <input id="hour" name="hour" type="number" min="0" max="23">
+              </div>
+            </div>
+            <div class="field">
+              <label>Minute</label>
+              <div class="ui input">
+                <input id="minute" name="minute" type="number" min="0" max="59">
+              </div>
+            </div>
+            <div class="field">
+              <div id="submit" class="ui green button" onclick="Submit();">Set</div>
+            </div>
+          </div>
+        </div>
+      </form>
+    </div>
+    <div id="warning" class="ui hidden warning message"></div>
+    <div id="info" class="ui hidden info message">
+      <p id="result"></p>
+    </div>
+  </body>
+</html>
+{{end}}

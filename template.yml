@@ -1,0 +1,119 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Serverless Application Cron
+
+Parameters:
+  ApplicationName:
+    Type: String
+    Default: 'ServerlessApplicationCron'
+  CronEventRuleName:
+    Type: String
+    Default: 'CronEventRule'
+  CronMainFunctionName:
+    Type: String
+    Default: 'CronMainFunction'
+  FrontPageApiStageName:
+    Type: String
+    Default: 'ProdStage'
+
+Metadata:
+  AWS::ServerlessRepo::Application:
+    Name: Serverless-Application-Cron
+    Description: 'This application is test for CloudWatch Events.'
+    Author: tanaka-takurou
+    SpdxLicenseId: MIT
+    LicenseUrl: LICENSE.txt
+    ReadmeUrl: README.md
+    Labels: ['ServerlessRepo']
+    HomePageUrl: https://github.com/tanaka-takurou/serverless-application-cron-page-go
+    SemanticVersion: 0.0.1
+    SourceCodeUrl: https://github.com/tanaka-takurou/serverless-application-cron-page-go
+
+Resources:
+  FrontPageApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      EndpointConfiguration: REGIONAL
+      StageName: !Ref FrontPageApiStageName
+  FrontPageFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      CodeUri: bin/
+      Handler: main
+      MemorySize: 256
+      Runtime: go1.x
+      Description: 'Cron Front Function'
+      Events:
+        FrontPageApi:
+          Type: Api
+          Properties:
+            Path: '/'
+            Method: get
+            RestApiId: !Ref FrontPageApi
+      Environment:
+        Variables:
+          REGION: !Ref 'AWS::Region'
+          API_PATH: !Join [ '', [ '/', !Ref FrontPageApiStageName, '/api'] ]
+  MainFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Ref CronMainFunctionName
+      CodeUri: api/bin/
+      Handler: main
+      MemorySize: 256
+      Runtime: go1.x
+      Description: 'Cron API Function'
+      Policies:
+      - Statement:
+        - Effect: 'Allow'
+          Action:
+            - 'logs:CreateLogGroup'
+            - 'logs:CreateLogStream'
+            - 'logs:PutLogEvents'
+          Resource: '*'
+        - Effect: 'Allow'
+          Action:
+            - 'lambda:*'
+            - 'events:DescribeRule'
+            - 'events:PutRule'
+          Resource: '*'
+      Environment:
+        Variables:
+          LAST_EVENT: ""
+          EVENT_NAME: !Ref CronEventRuleName
+          FUNCTION_NAME: !Ref CronMainFunctionName
+          REGION: !Ref 'AWS::Region'
+      Events:
+        FrontPageApi:
+          Type: Api
+          Properties:
+            Path: '/api'
+            Method: post
+            RestApiId: !Ref FrontPageApi
+  CronApiPermission:
+    Type: AWS::Lambda::Permission
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !Ref MainFunction
+      Principal: apigateway.amazonaws.com
+  CronEventRule:
+    Type: AWS::Events::Rule
+    Properties:
+      Name: !Ref CronEventRuleName
+      Description: CronRule
+      ScheduleExpression: 'cron(0 12 * * ? *)'
+      State: 'ENABLED'
+      Targets:
+        - Arn: !GetAtt MainFunction.Arn
+          Id: TargetCronFunction
+  PermissionForEventsToInvokeLambda:
+    Type: AWS::Lambda::Permission
+    Properties:
+      FunctionName: !Ref MainFunction
+      Action: 'lambda:InvokeFunction'
+      Principal: 'events.amazonaws.com'
+      SourceArn: !GetAtt CronEventRule.Arn
+
+Outputs:
+  APIURI:
+    Value: !Join [ '', [ 'https://', !Ref FrontPageApi, '.execute-api.',!Ref 'AWS::Region','.amazonaws.com/',!Ref FrontPageApiStageName,'/'] ]
