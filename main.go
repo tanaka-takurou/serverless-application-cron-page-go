@@ -18,7 +18,7 @@ type PageData struct {
 
 type Response events.APIGatewayProxyResponse
 
-const title string = "Sample SSO Page"
+const title string = "Cloud Watch Events Page"
 
 func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (Response, error) {
 	tmp := template.New("tmp")
