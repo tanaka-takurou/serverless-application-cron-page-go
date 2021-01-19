@@ -5,11 +5,8 @@ import (
 	"fmt"
 	"log"
 	"time"
-	"bytes"
 	"context"
-	"reflect"
 	"strconv"
-	"strings"
 	"net/http"
 	"encoding/json"
 	"github.com/aws/aws-lambda-go/events"
@@ -54,7 +51,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 					if e_ != nil {
 						err = e_
 					} else {
-						jsonBytes, _ = json.Marshal(APIResponse{Message: "Success", Last: stringValue(environment["LAST_EVENT"]), Schedule: schedule})
+						jsonBytes, _ = json.Marshal(APIResponse{Message: "Success", Last: environment["LAST_EVENT"], Schedule: schedule})
 					}
 				}
 			case "put" :
@@ -105,7 +102,7 @@ func HandleRequest(ctx context.Context, request events.APIGatewayProxyRequest) (
 
 func describeRule(ctx context.Context)(string, error) {
 	if cloudwatcheventsClient == nil {
-		cloudwatcheventsClient = getCloudwatcheventsClient()
+		cloudwatcheventsClient = getCloudwatcheventsClient(ctx)
 	}
 	params := &cloudwatchevents.DescribeRuleInput{
 		Name: aws.String(os.Getenv("EVENT_NAME")),
@@ -115,7 +112,7 @@ func describeRule(ctx context.Context)(string, error) {
 		log.Print(err)
 		return "", err
 	}
-	return stringValue(res.ScheduleExpression), nil
+	return aws.ToString(res.ScheduleExpression), nil
 }
 
 func putRule(ctx context.Context, minute string, hour string, day string, month string, year string) error {
@@ -150,7 +147,7 @@ func putRule(ctx context.Context, minute string, hour string, day string, month 
 		sy = strconv.Itoa(y_)
 	}
 	if cloudwatcheventsClient == nil {
-		cloudwatcheventsClient = getCloudwatcheventsClient()
+		cloudwatcheventsClient = getCloudwatcheventsClient(ctx)
 	}
 	params := &cloudwatchevents.PutRuleInput{
 		Name: aws.String(os.Getenv("EVENT_NAME")),
@@ -165,16 +162,16 @@ func putRule(ctx context.Context, minute string, hour string, day string, month 
 	return nil
 }
 
-func getLambdaEnvironment(ctx context.Context)(map[string]*string, error) {
+func getLambdaEnvironment(ctx context.Context)(map[string]string, error) {
 	if lambdaClient == nil {
-		lambdaClient = getLambdaClient()
+		lambdaClient = getLambdaClient(ctx)
 	}
 	res, err := lambdaClient.GetFunctionConfiguration(ctx, &slambda.GetFunctionConfigurationInput{
 		FunctionName: aws.String(os.Getenv("FUNCTION_NAME")),
 	})
 	if err != nil {
 		log.Println(err)
-		return map[string]*string{}, err
+		return map[string]string{}, err
 	}
 	return res.Environment.Variables, nil
 }
@@ -186,7 +183,7 @@ func updateLambdaEnvironment(ctx context.Context) error {
 		log.Println(err)
 		return err
 	}
-	env["LAST_EVENT"] = aws.String(t.Format(layout))
+	env["LAST_EVENT"] = t.Format(layout)
 	_, err = lambdaClient.UpdateFunctionConfiguration(ctx, &slambda.UpdateFunctionConfigurationInput{
 		FunctionName: aws.String(os.Getenv("FUNCTION_NAME")),
 		Environment: &types.Environment{
@@ -200,96 +197,27 @@ func updateLambdaEnvironment(ctx context.Context) error {
 	return nil
 }
 
-func getCloudwatcheventsClient() *cloudwatchevents.Client {
+func getCloudwatcheventsClient(ctx context.Context) *cloudwatchevents.Client {
 	if cfg.Region != os.Getenv("REGION") {
-		cfg = getConfig()
+		cfg = getConfig(ctx)
 	}
 	return cloudwatchevents.NewFromConfig(cfg)
 }
 
-func getLambdaClient() *slambda.Client {
+func getLambdaClient(ctx context.Context) *slambda.Client {
 	if cfg.Region != os.Getenv("REGION") {
-		cfg = getConfig()
+		cfg = getConfig(ctx)
 	}
 	return slambda.NewFromConfig(cfg)
 }
 
-func getConfig() aws.Config {
+func getConfig(ctx context.Context) aws.Config {
 	var err error
-	newConfig, err := config.LoadDefaultConfig()
-	newConfig.Region = os.Getenv("REGION")
+	cfg, err := config.LoadDefaultConfig(ctx, config.WithRegion(os.Getenv("REGION")))
 	if err != nil {
 		log.Print(err)
 	}
-	return newConfig
-}
-
-func stringValue(i interface{}) string {
-	var buf bytes.Buffer
-	strVal(reflect.ValueOf(i), 0, &buf)
-	res := buf.String()
-	return res[1:len(res) - 1]
-}
-
-func strVal(v reflect.Value, indent int, buf *bytes.Buffer) {
-	for v.Kind() == reflect.Ptr {
-		v = v.Elem()
-	}
-	switch v.Kind() {
-	case reflect.Struct:
-		buf.WriteString("{\n")
-		for i := 0; i < v.Type().NumField(); i++ {
-			ft := v.Type().Field(i)
-			fv := v.Field(i)
-			if ft.Name[0:1] == strings.ToLower(ft.Name[0:1]) {
-				continue // ignore unexported fields
-			}
-			if (fv.Kind() == reflect.Ptr || fv.Kind() == reflect.Slice) && fv.IsNil() {
-				continue // ignore unset fields
-			}
-			buf.WriteString(strings.Repeat(" ", indent+2))
-			buf.WriteString(ft.Name + ": ")
-			if tag := ft.Tag.Get("sensitive"); tag == "true" {
-				buf.WriteString("<sensitive>")
-			} else {
-				strVal(fv, indent+2, buf)
-			}
-			buf.WriteString(",\n")
-		}
-		buf.WriteString("\n" + strings.Repeat(" ", indent) + "}")
-	case reflect.Slice:
-		nl, id, id2 := "", "", ""
-		if v.Len() > 3 {
-			nl, id, id2 = "\n", strings.Repeat(" ", indent), strings.Repeat(" ", indent+2)
-		}
-		buf.WriteString("[" + nl)
-		for i := 0; i < v.Len(); i++ {
-			buf.WriteString(id2)
-			strVal(v.Index(i), indent+2, buf)
-			if i < v.Len()-1 {
-				buf.WriteString("," + nl)
-			}
-		}
-		buf.WriteString(nl + id + "]")
-	case reflect.Map:
-		buf.WriteString("{\n")
-		for i, k := range v.MapKeys() {
-			buf.WriteString(strings.Repeat(" ", indent+2))
-			buf.WriteString(k.String() + ": ")
-			strVal(v.MapIndex(k), indent+2, buf)
-			if i < v.Len()-1 {
-				buf.WriteString(",\n")
-			}
-		}
-		buf.WriteString("\n" + strings.Repeat(" ", indent) + "}")
-	default:
-		format := "%v"
-		switch v.Interface().(type) {
-		case string:
-			format = "%q"
-		}
-		fmt.Fprintf(buf, format, v.Interface())
-	}
+	return cfg
 }
 
 func main() {
