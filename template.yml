@@ -38,10 +38,12 @@ Resources:
   FrontPageFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Architectures:
+      - arm64
       CodeUri: bin/
-      Handler: main
+      Handler: bootstrap
       MemorySize: 256
-      Runtime: go1.x
+      Runtime: provided.al2
       Description: 'Cron Front Function'
       Events:
         FrontPageApi:
@@ -57,11 +59,13 @@ Resources:
   MainFunction:
     Type: AWS::Serverless::Function
     Properties:
+      Architectures:
+      - arm64
       FunctionName: !Ref CronMainFunctionName
       CodeUri: api/bin/
-      Handler: main
+      Handler: bootstrap
       MemorySize: 256
-      Runtime: go1.x
+      Runtime: provided.al2
       Description: 'Cron API Function'
       Policies:
       - Statement:
